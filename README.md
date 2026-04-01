@@ -1,4 +1,4 @@
-# Ollama + Open WebUI (Podman)
+# Offline Ollama + Claude Code + Open WebUI (Podman)
 
 A containerized setup for running Ollama and Claude Code locally using Podman. Designed for offline/air-gapped operation with internet access only for model downloads with optional WebUI chat interface (also offline).
 
