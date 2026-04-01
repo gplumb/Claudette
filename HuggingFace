@@ -1,0 +1,27 @@
+# =============================================================================
+# HuggingFace - Dockerfile for downloading models from HuggingFace Hub
+# =============================================================================
+#
+# This is a minimal container with only the huggingface-hub CLI installed.
+# It is used as an ephemeral downloader - spun up to pull a GGUF file,
+# then stopped and removed. Nothing gets installed on the host.
+#
+# Build:
+#   podman build -f HuggingFace -t huggingface-downloader .
+#
+# This container requires internet access to reach huggingface.co.
+# No ports are exposed - it only writes to the mounted model volume.
+# =============================================================================
+
+FROM python:3.12-slim
+
+# ---------------------------------------------------------------------------
+# Install only what's needed: the huggingface-hub CLI
+# Clean up pip cache to keep the image small
+# ---------------------------------------------------------------------------
+RUN pip install --no-cache-dir huggingface-hub
+
+# ---------------------------------------------------------------------------
+# Working directory for downloads (will be overridden by volume mount)
+# ---------------------------------------------------------------------------
+WORKDIR /models

@@ -1,0 +1,51 @@
+# =============================================================================
+# WebUI - Dockerfile for Open WebUI (offline mode, local Ollama only)
+# =============================================================================
+#
+# This container runs Open WebUI configured to talk to a local Ollama
+# instance over the shared internal podman network. Internet access is
+# disabled - no external API calls, no web search, no HuggingFace downloads.
+#
+# Build:
+#   podman build -f WebUI -t webui-offline .
+#
+# The container exposes port 8080 (Open WebUI's default port), which is
+# mapped to port 2000 on the host.
+# =============================================================================
+
+FROM ghcr.io/open-webui/open-webui:main
+
+# Explicitly expose the default Open WebUI port
+EXPOSE 8080
+
+# ---------------------------------------------------------------------------
+# Point WebUI at the Ollama container on the shared internal network.
+# The container name "ollama" resolves via podman's internal DNS.
+# ---------------------------------------------------------------------------
+ENV OLLAMA_BASE_URL=http://ollama:11434
+
+# ---------------------------------------------------------------------------
+# Disable authentication - this is a local-only setup
+# ---------------------------------------------------------------------------
+ENV WEBUI_AUTH=false
+
+# ---------------------------------------------------------------------------
+# No secret key needed for local use
+# ---------------------------------------------------------------------------
+ENV WEBUI_SECRET_KEY=
+
+# ---------------------------------------------------------------------------
+# Disable all features that require internet access
+# ---------------------------------------------------------------------------
+
+# Disable RAG web search (would need external API access)
+ENV ENABLE_RAG_WEB_SEARCH=false
+
+# Disable RAG local web fetch (would need outbound HTTP)
+ENV ENABLE_RAG_LOCAL_WEB_FETCH=false
+
+# Force transformers library into offline mode (no model downloads)
+ENV TRANSFORMERS_OFFLINE=1
+
+# Force HuggingFace Hub into offline mode (no model/tokenizer downloads)
+ENV HF_HUB_OFFLINE=1

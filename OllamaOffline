@@ -1,0 +1,28 @@
+# =============================================================================
+# OllamaOffline - Dockerfile for running Ollama in offline/air-gapped mode
+# =============================================================================
+#
+# This container runs the Ollama LLM server with NO internet access.
+# It is intended for local inference only - models should be downloaded
+# using the OllamaOnline container and download.sh script.
+#
+# GPU support is provided via NVIDIA Container Toolkit (CDI).
+#
+# Build:
+#   podman build -f OllamaOffline -t ollama-offline .
+#
+# The container exposes port 11434 (Ollama's default API port) so that
+# it can be accessed from the host and from other containers on the
+# shared internal network.
+# =============================================================================
+
+FROM ollama/ollama:latest
+
+# Explicitly expose the default Ollama API port
+EXPOSE 11434
+
+# Configure Ollama to listen on all interfaces (required for container networking)
+ENV OLLAMA_HOST=0.0.0.0
+
+# Keep models loaded in memory for 1 hour to avoid repeated load times
+ENV OLLAMA_KEEP_ALIVE=1h

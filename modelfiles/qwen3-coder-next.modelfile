@@ -1,0 +1,39 @@
+# =============================================================================
+# Modelfile for Qwen3-Coder-Next (UD-Q2_K_XL)
+# =============================================================================
+#
+# This Modelfile configures the correct chat template, stop tokens, and
+# sampling parameters for the Qwen3-Coder-Next model. It uses the standard
+# Qwen3 ChatML format with <|im_start|> / <|im_end|> delimiters.
+#
+# Usage:
+#   ./overwrite.sh qwen3-coder-next ./modelfiles/qwen3-coder-next.modelfile
+# =============================================================================
+
+FROM /root/.ollama/Qwen3-Coder-Next-UD-Q2_K_XL.gguf
+
+TEMPLATE """{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}
+{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 -}}
+{{- if eq .Role "user" }}<|im_start|>user
+{{ .Content }}<|im_end|>
+{{ else if eq .Role "assistant" }}<|im_start|>assistant
+{{ .Content }}{{ if not $last }}<|im_end|>
+{{ end }}
+{{- end }}
+{{- if and (ne .Role "assistant") $last }}<|im_start|>assistant
+{{ end }}
+{{- end }}"""
+
+SYSTEM """You are Qwen, a helpful AI assistant created by Alibaba Cloud. You are helpful, harmless, and honest."""
+
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|endoftext|>"
+PARAMETER num_ctx 32768
+PARAMETER temperature 0.7
+PARAMETER top_k 20
+PARAMETER top_p 0.8
+PARAMETER repeat_penalty 1.05

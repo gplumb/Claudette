@@ -1,0 +1,26 @@
+# =============================================================================
+# OllamaOnline - Dockerfile for downloading Ollama models (internet enabled)
+# =============================================================================
+#
+# This container is a variant of the Ollama image that has internet access
+# for the sole purpose of downloading models via "ollama pull".
+#
+# It is NOT intended for running inference - use OllamaOffline for that.
+# This container shares the same model volume (~/Documents/data/models)
+# so that models downloaded here are immediately available to the offline
+# container.
+#
+# The container is ephemeral: download.sh creates it, pulls the model,
+# then stops and removes the container. The image remains on disk.
+#
+# Build:
+#   podman build -f OllamaOnline -t ollama-online .
+#
+# No ports are exposed - this container does not serve API requests.
+# =============================================================================
+
+FROM ollama/ollama:latest
+
+# Configure Ollama to listen on all interfaces (needed for the pull command
+# to work, as ollama pull talks to the local ollama server process)
+ENV OLLAMA_HOST=0.0.0.0
