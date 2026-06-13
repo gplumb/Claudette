@@ -7,17 +7,24 @@
 #   Local file:
 #     ./import.sh <gguf_file> <model_name>
 #
-#   Download from HuggingFace:
+#   Download single-file GGUF from HuggingFace:
 #     ./import.sh --hf <repo_id> <gguf_filename> <model_name>
+#
+#   Download a sharded GGUF quant (subdirectory) from HuggingFace:
+#     ./import.sh --hf-sharded <repo_id> <quant_subdir> <model_name>
 #
 # Examples:
 #   ./import.sh ~/Downloads/my-model.gguf my-model
 #   ./import.sh --hf unsloth/Qwen3-Coder-Next-GGUF Qwen3-Coder-Next-UD-Q2_K_XL.gguf qwen3-coder-next
+#   ./import.sh --hf-sharded unsloth/MiniMax-M2.7-GGUF UD-IQ1_M minimax-m27
 #
 # This script:
 #   - Requires the Ollama container to be running (via ./llm.sh on)
-#   - In --hf mode, spins up a temporary container to download the GGUF
+#   - In --hf / --hf-sharded mode, spins up a temporary container to download
 #     directly into the model volume (nothing installed on host)
+#   - In --hf-sharded mode, downloads every *.gguf shard inside <quant_subdir>
+#     and points the Modelfile at the first shard (llama.cpp auto-discovers
+#     the rest)
 #   - Generates a Modelfile and registers the model with Ollama
 # =============================================================================
 
@@ -38,10 +45,12 @@ usage() {
     echo "Usage:"
     echo "  $0 <gguf_file> <model_name>"
     echo "  $0 --hf <repo_id> <gguf_filename> <model_name>"
+    echo "  $0 --hf-sharded <repo_id> <quant_subdir> <model_name>"
     echo ""
     echo "Examples:"
     echo "  $0 ~/Downloads/my-model.gguf my-model"
     echo "  $0 --hf unsloth/Qwen3-Coder-Next-GGUF Qwen3-Coder-Next-UD-Q2_K_XL.gguf qwen3-coder-next"
+    echo "  $0 --hf-sharded unsloth/MiniMax-M2.7-GGUF UD-IQ1_M minimax-m27"
     exit 1
 }
 
@@ -108,6 +117,40 @@ download_from_hf() {
 }
 
 # ---------------------------------------------------------------------------
+# Download every shard of a sharded GGUF quant from HuggingFace.
+# All *.gguf files inside <quant_subdir> are downloaded into
+# ${MODEL_DIR}/<model_name>/<quant_subdir>/ so each imported model is
+# isolated from the others.
+# ---------------------------------------------------------------------------
+download_sharded_from_hf() {
+    local repo_id="$1"
+    local quant_subdir="$2"
+    local model_name="$3"
+
+    ensure_model_dir
+
+    local host_dest="${MODEL_DIR}/${model_name}"
+    mkdir -p "$host_dest"
+
+    echo "Starting HuggingFace sharded download container..."
+    echo "Downloading: $repo_id / $quant_subdir/*.gguf"
+    echo "Destination: $host_dest/$quant_subdir/"
+    echo "This will take a while for multi-GB shards..."
+    echo ""
+
+    podman run --rm \
+        --name "$HF_CONTAINER_NAME" \
+        --replace \
+        -e "HF_REPO=${repo_id}" \
+        -e "HF_PATTERN=${quant_subdir}/*.gguf" \
+        -v "${host_dest}:/models:Z" \
+        "$HF_IMAGE_NAME" \
+        python -c "import os; from huggingface_hub import snapshot_download; snapshot_download(repo_id=os.environ['HF_REPO'], allow_patterns=os.environ['HF_PATTERN'], local_dir='/models')"
+
+    echo "Download complete."
+}
+
+# ---------------------------------------------------------------------------
 # Register a GGUF with Ollama inside the running container
 # ---------------------------------------------------------------------------
 register_model() {
@@ -171,6 +214,46 @@ if [ "$1" = "--hf" ]; then
 
     # Register with Ollama
     register_model "$GGUF_FILENAME" "$MODEL_NAME"
+
+elif [ "$1" = "--hf-sharded" ]; then
+    # ---------------------------------------------------------------------------
+    # Sharded HuggingFace mode:
+    #   ./import.sh --hf-sharded <repo_id> <quant_subdir> <model_name>
+    # ---------------------------------------------------------------------------
+    if [ $# -ne 4 ]; then
+        echo "Error: --hf-sharded requires 3 arguments: <repo_id> <quant_subdir> <model_name>"
+        echo ""
+        usage
+    fi
+
+    HF_REPO="$2"
+    QUANT_SUBDIR="$3"
+    MODEL_NAME="$4"
+
+    # Download all shards into ${MODEL_DIR}/${MODEL_NAME}/${QUANT_SUBDIR}/
+    download_sharded_from_hf "$HF_REPO" "$QUANT_SUBDIR" "$MODEL_NAME"
+
+    # Locate the first shard (filename pattern *-00001-of-*.gguf).
+    SHARD_DIR="${MODEL_DIR}/${MODEL_NAME}/${QUANT_SUBDIR}"
+    FIRST_SHARD=$(find "$SHARD_DIR" -maxdepth 1 -type f -name '*-00001-of-*.gguf' | head -n 1)
+
+    if [ -z "$FIRST_SHARD" ]; then
+        # Fallback: single-file quant that happened to live in a subdir
+        FIRST_SHARD=$(find "$SHARD_DIR" -maxdepth 1 -type f -name '*.gguf' | sort | head -n 1)
+    fi
+
+    if [ -z "$FIRST_SHARD" ]; then
+        echo "Error: no .gguf files found under $SHARD_DIR after download."
+        exit 1
+    fi
+
+    # Path relative to MODEL_DIR (which maps to /root/.ollama/ in the container)
+    RELATIVE_PATH="${FIRST_SHARD#${MODEL_DIR}/}"
+    echo "First shard: $FIRST_SHARD"
+    echo "Ollama will see it at: /root/.ollama/${RELATIVE_PATH}"
+    echo "(llama.cpp auto-discovers the remaining shards in the same directory)"
+
+    register_model "$RELATIVE_PATH" "$MODEL_NAME"
 
 else
     # ---------------------------------------------------------------------------

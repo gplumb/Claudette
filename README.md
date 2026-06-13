@@ -109,10 +109,16 @@ Examples:
 
 Import a GGUF model into the running Ollama container. Supports both local files and direct download from HuggingFace (without installing anything on the host).
 
-**From HuggingFace (recommended):**
+**From HuggingFace (single-file GGUF):**
 
 ```bash
 ./import.sh --hf <repo_id> <gguf_filename> <model_name>
+```
+
+**From HuggingFace (sharded GGUF — large MoE models):**
+
+```bash
+./import.sh --hf-sharded <repo_id> <quant_subdir> <model_name>
 ```
 
 **From a local file:**
@@ -135,15 +141,29 @@ podman exec -it ollama ollama run qwen3-coder-next
 # Or via Open WebUI at http://localhost:2000
 ```
 
+Example — importing a sharded quant of MiniMax-M2.7 from HuggingFace:
+
+Some Unsloth repos publish each quant as a subdirectory of multi-part shards (e.g. `UD-IQ1_M/MiniMax-M2.7-UD-IQ1_M-00001-of-00003.gguf`). `--hf-sharded` downloads every `*.gguf` file under the given subdirectory and points Ollama at the first shard; llama.cpp auto-discovers the rest.
+
+```bash
+./llm.sh on
+./import.sh --hf-sharded unsloth/MiniMax-M2.7-GGUF UD-IQ1_M minimax-m27
+podman exec -it ollama ollama run minimax-m27
+```
+
 - Requires the Ollama container to be running
-- In `--hf` mode, uses a temporary container to download — nothing installed on the host
+- In `--hf` / `--hf-sharded` mode, uses a temporary container to download — nothing installed on the host
+- `--hf-sharded` places files under `~/Documents/data/models/<model_name>/<quant_subdir>/` so each imported model is isolated
 - Registers the model with Ollama automatically
 
 If registration fails and you need to clean up:
 
 ```bash
-# Remove the GGUF from the model volume
+# Single-file (--hf) — remove the GGUF from the model volume
 rm ~/Documents/data/models/Qwen3-Coder-Next-UD-Q2_K_XL.gguf
+
+# Sharded (--hf-sharded) — remove the model's directory and all shards
+rm -rf ~/Documents/data/models/minimax-m27
 
 # If the model was partially registered, remove it from Ollama
 podman exec ollama ollama rm qwen3-coder-next
